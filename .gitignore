@@ -1,0 +1,94 @@
+# Build output
+2
+build/
+3
+build-*/
+4
+out/
+5
+cmake-build-*/
+6
+
+7
+# CMake
+8
+CMakeUserPresets.json
+9
+
+
+CMakeCache.txt
+10
+CMakeFiles/
+11
+cmake_install.cmake
+12
+
+13
+# Visual Studio
+14
+.vs/
+15
+*.user
+16
+*.suo
+17
+*.vcxproj.user
+18
+*.aps
+19
+*.ncb
+20
+*.sdf
+21
+
+22
+# Other editors
+23
+.idea/
+24
+.vscode/
+25
+*.swp
+26
+
+27
+# Built plug-ins and binaries, in case they end up outside build/
+28
+*.vst3
+29
+*.dll
+30
+*.exe
+31
+*.lib
+32
+*.exp
+33
+*.pdb
+34
+*.ilk
+35
+*.obj
+36
+
+37
+# A local JUCE clone, if you keep one inside the project
+38
+JUCE/
+39
+
+40
+# Rendered test audio and other large local files
+41
+renders/
+42
+*.zip
+43
+
+44
+# OS files
+45
+Thumbs.db
+46
+.DS_Store
+47
