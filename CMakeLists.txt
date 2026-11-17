@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.22)
-project(Corrode VERSION 0.1.0)
+
+# Link the Visual C++ runtime statically so users don't need the redistributable.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+project(Corrode VERSION 0.2.0)
 
 set(CMAKE_CXX_STANDARD 20)
 

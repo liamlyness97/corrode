@@ -19,12 +19,26 @@ XYPad::XYPad (juce::RangedAudioParameter& freq,
     modeAttach.sendInitialUpdate();
 }
 
+juce::Rectangle<float> XYPad::plotArea() const
+{
+    // Inset so the handle stays fully visible at the edges.
+    return getLocalBounds().toFloat().reduced (10.0f);
+}
+
 void XYPad::paint (juce::Graphics& g)
 {
-    auto b = getLocalBounds().toFloat();
+    auto b    = getLocalBounds().toFloat();
+    auto plot = plotArea();
+    const auto accent = accentForMode (modeIndex);
 
-    g.setColour (juce::Colour (0xff17191c));
-    g.fillRoundedRectangle (b, 4.0f);
+    // Background
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff14171b), 0.0f, b.getY(),
+                                             juce::Colour (0xff0c0d10), 0.0f, b.getBottom(), false));
+    g.fillRoundedRectangle (b, 6.0f);
+
+    juce::Path clip;
+    clip.addRoundedRectangle (b, 6.0f);
+    g.reduceClipRegion (clip);
 
     // Frequency grid: log spaced like an EQ display, brighter at 1 kHz and 10 kHz.
     for (float decade : { 100.0f, 1000.0f, 10000.0f })
@@ -35,19 +49,33 @@ void XYPad::paint (juce::Graphics& g)
             if (hz <= 300.0f || hz >= 18000.0f)
                 continue;
 
-            const float x = b.getX() + b.getWidth() * freqParam.convertTo0to1 (hz);
-            g.setColour (juce::Colour (m == 1 ? 0xff3a3f46 : 0xff262a2f));
+            const float x = plot.getX() + plot.getWidth() * freqParam.convertTo0to1 (hz);
+            g.setColour (juce::Colours::white.withAlpha (m == 1 ? 0.10f : 0.04f));
             g.drawVerticalLine ((int) x, b.getY(), b.getBottom());
         }
     }
 
     // Amount grid
-    g.setColour (juce::Colour (0xff2a2e33));
+    g.setColour (juce::Colours::white.withAlpha (0.05f));
     for (int i = 1; i < 4; ++i)
     {
-        const float y = b.getY() + b.getHeight() * (float) i / 4.0f;
+        const float y = plot.getY() + plot.getHeight() * (float) i / 4.0f;
         g.drawHorizontalLine ((int) y, b.getX(), b.getRight());
     }
+
+    // Frequency labels
+    g.setFont (juce::Font (juce::FontOptions (10.0f)));
+    g.setColour (juce::Colours::white.withAlpha (0.35f));
+    for (float hz : { 1000.0f, 10000.0f })
+    {
+        const float x = plot.getX() + plot.getWidth() * freqParam.convertTo0to1 (hz);
+        g.drawText (hz < 5000.0f ? "1k" : "10k",
+                    juce::Rectangle<float> (x - 14.0f, b.getBottom() - 14.0f, 28.0f, 12.0f),
+                    juce::Justification::centred);
+    }
+
+    const float dotX = plot.getX() + plot.getWidth()  * freqNorm;
+    const float dotY = plot.getBottom() - plot.getHeight() * amountNorm;
 
     // Noise band, drawn with the same band-pass shape the DSP uses.
     if (modeIndex != 2 && amountNorm > 0.0f)
@@ -70,8 +98,8 @@ void XYPad::paint (juce::Graphics& g)
             const float d   = r - 1.0f / r;
             const float mag = 1.0f / std::sqrt (1.0f + q * q * d * d);
 
-            const float x = b.getX() + b.getWidth() * nx;
-            const float y = b.getBottom() - b.getHeight() * 0.7f * fade * mag;
+            const float x = plot.getX() + plot.getWidth() * nx;
+            const float y = plot.getBottom() - plot.getHeight() * 0.7f * fade * mag;
 
             if (i == 0)
                 curve.startNewSubPath (x, y);
@@ -79,19 +107,50 @@ void XYPad::paint (juce::Graphics& g)
                 curve.lineTo (x, y);
         }
 
-        g.setColour (juce::Colour (0xff3d8fe0).withAlpha (fade));
-        g.strokePath (curve, juce::PathStrokeType (1.5f));
+        // Soft fill under the curve
+        juce::Path fill (curve);
+        fill.lineTo (plot.getRight(), b.getBottom());
+        fill.lineTo (plot.getX(), b.getBottom());
+        fill.closeSubPath();
+
+        g.setGradientFill (juce::ColourGradient (accent.withAlpha (0.20f * fade), 0.0f, plot.getY() + plot.getHeight() * 0.3f,
+                                                 accent.withAlpha (0.0f),         0.0f, b.getBottom(), false));
+        g.fillPath (fill);
+
+        // Glow, then the line itself
+        g.setColour (accent.withAlpha (0.22f * fade));
+        g.strokePath (curve, juce::PathStrokeType (5.0f));
+        g.setColour (accent.withAlpha (fade));
+        g.strokePath (curve, juce::PathStrokeType (1.6f));
     }
 
-    // Handle
-    const float dotX = b.getX() + b.getWidth()  * freqNorm;
-    const float dotY = b.getBottom() - b.getHeight() * amountNorm;
+    // Handle: halo, body, bright centre
+    juce::ColourGradient halo (accent.withAlpha (0.45f), dotX, dotY,
+                               accent.withAlpha (0.0f),  dotX + 18.0f, dotY, true);
+    g.setGradientFill (halo);
+    g.fillEllipse (dotX - 18.0f, dotY - 18.0f, 36.0f, 36.0f);
 
-    g.setColour (juce::Colour (0xff6fd14a));
+    g.setColour (accent);
+    g.fillEllipse (dotX - 6.0f, dotY - 6.0f, 12.0f, 12.0f);
+
+    g.setColour (juce::Colours::white.withAlpha (0.85f));
+    g.fillEllipse (dotX - 2.0f, dotY - 2.0f, 4.0f, 4.0f);
+
     if (dragging)
-        g.drawEllipse (dotX - 7.0f, dotY - 7.0f, 14.0f, 14.0f, 2.0f);
-    else
-        g.fillEllipse (dotX - 7.0f, dotY - 7.0f, 14.0f, 14.0f);
+    {
+        g.setColour (accent.withAlpha (0.6f));
+        g.drawEllipse (dotX - 10.0f, dotY - 10.0f, 20.0f, 20.0f, 1.5f);
+
+        g.setFont (juce::Font (juce::FontOptions (11.0f)));
+        g.setColour (juce::Colours::white.withAlpha (0.75f));
+        g.drawText (freqParam.getCurrentValueAsText() + "   " + amountParam.getCurrentValueAsText(),
+                    b.reduced (8.0f, 6.0f).removeFromTop (14.0f),
+                    juce::Justification::topLeft);
+    }
+
+    // Border
+    g.setColour (juce::Colour (0xff23272e));
+    g.drawRoundedRectangle (b.reduced (0.5f), 6.0f, 1.0f);
 }
 
 void XYPad::mouseDown (const juce::MouseEvent& e)
@@ -117,10 +176,10 @@ void XYPad::mouseUp (const juce::MouseEvent&)
 
 void XYPad::setFromMouse (const juce::MouseEvent& e)
 {
-    auto b = getLocalBounds().toFloat();
+    auto plot = plotArea();
 
-    const float nx = juce::jlimit (0.0f, 1.0f, (e.position.x - b.getX()) / b.getWidth());
-    const float ny = juce::jlimit (0.0f, 1.0f, 1.0f - (e.position.y - b.getY()) / b.getHeight());
+    const float nx = juce::jlimit (0.0f, 1.0f, (e.position.x - plot.getX()) / plot.getWidth());
+    const float ny = juce::jlimit (0.0f, 1.0f, 1.0f - (e.position.y - plot.getY()) / plot.getHeight());
 
     freqAttach.setValueAsPartOfGesture   (freqParam.convertFrom0to1 (nx));
     amountAttach.setValueAsPartOfGesture (amountParam.convertFrom0to1 (ny));
@@ -136,10 +195,16 @@ CorrodeEditor::CorrodeEditor (CorrodeProcessor& p)
       modeAttach (*p.apvts.getParameter ("mode"), [this] (float v)
       {
           const int index = (int) std::round (v);
+
           for (size_t i = 0; i < modeButtons.size(); ++i)
               modeButtons[i].setToggleState ((int) i == index, juce::dontSendNotification);
+
+          laf.accent = accentForMode (index);
+          repaint();
       })
 {
+    setLookAndFeel (&laf);
+
     addAndMakeVisible (pad);
 
     const char* modeNames[] = { "Noise", "Wide Noise", "Sine" };
@@ -147,6 +212,7 @@ CorrodeEditor::CorrodeEditor (CorrodeProcessor& p)
     {
         auto& button = modeButtons[i];
         button.setButtonText (modeNames[i]);
+        button.getProperties().set ("segment", (int) i);
         button.onClick = [this, i] { modeAttach.setValueAsCompleteGesture ((float) i); };
         addAndMakeVisible (button);
     }
@@ -155,11 +221,12 @@ CorrodeEditor::CorrodeEditor (CorrodeProcessor& p)
     auto setupKnob = [this] (juce::Slider& slider, juce::Label& label, const juce::String& text)
     {
         slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 76, 18);
+        slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 80, 18);
         addAndMakeVisible (slider);
 
-        label.setText (text, juce::dontSendNotification);
+        label.setText (text.toUpperCase(), juce::dontSendNotification);
         label.setJustificationType (juce::Justification::centred);
+        label.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)).withExtraKerningFactor (0.12f));
         addAndMakeVisible (label);
     };
 
@@ -179,35 +246,52 @@ CorrodeEditor::CorrodeEditor (CorrodeProcessor& p)
     widthSliderAttach  = attach ("width",  widthSlider);
     amountSliderAttach = attach ("amount", amountSlider);
 
-    setSize (340, 364);
+    setSize (360, 410);
 }
 
 void CorrodeEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (juce::Colour (0xff202225));
+    // Edge to edge: the host's own window frame is the border.
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1b1e24), 0.0f, 0.0f,
+                                             juce::Colour (0xff121418), 0.0f, (float) getHeight(), false));
+    g.fillAll();
+
+    auto header = getLocalBounds().reduced (12).removeFromTop (26);
+
+    g.setColour (juce::Colour (0xff8a919b));
+    g.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)).withExtraKerningFactor (0.25f));
+    g.drawText ("CORRODE", header, juce::Justification::centredLeft);
+
+    // Small status dot in the current mode's colour
+    g.setColour (laf.accent);
+    g.fillEllipse ((float) header.getRight() - 8.0f, (float) header.getCentreY() - 3.0f, 6.0f, 6.0f);
 }
 
 void CorrodeEditor::resized()
 {
     auto area = getLocalBounds().reduced (12);
 
+    area.removeFromTop (26);   // header, drawn in paint()
+
     pad.setBounds (area.removeFromTop (180));
-    area.removeFromTop (8);
+    area.removeFromTop (10);
 
-    auto buttonRow = area.removeFromTop (28);
+    // Mode buttons join up into one segmented control.
+    auto buttonRow = area.removeFromTop (30);
     const int buttonWidth = buttonRow.getWidth() / 3;
-    for (auto& button : modeButtons)
-        button.setBounds (buttonRow.removeFromLeft (buttonWidth).reduced (2, 0));
+    modeButtons[0].setBounds (buttonRow.removeFromLeft (buttonWidth));
+    modeButtons[1].setBounds (buttonRow.removeFromLeft (buttonWidth));
+    modeButtons[2].setBounds (buttonRow);
 
-    area.removeFromTop (8);
+    area.removeFromTop (10);
 
     const int columnWidth = area.getWidth() / 3;
 
     auto layoutColumn = [&] (juce::Label& label, juce::Slider& slider)
     {
         auto column = area.removeFromLeft (columnWidth);
-        label.setBounds (column.removeFromTop (18));
-        slider.setBounds (column);
+        label.setBounds (column.removeFromBottom (18));
+        slider.setBounds (column.reduced (6, 0));
     };
 
     layoutColumn (freqLabel,   freqSlider);

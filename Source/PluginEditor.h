@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "CorrodeLookAndFeel.h"
 #include <array>
 #include <memory>
 
@@ -20,6 +21,7 @@ public:
     void mouseUp (const juce::MouseEvent&) override;
 
 private:
+    juce::Rectangle<float> plotArea() const;
     void setFromMouse (const juce::MouseEvent&);
 
     juce::RangedAudioParameter& freqParam;
@@ -38,11 +40,15 @@ class CorrodeEditor : public juce::AudioProcessorEditor
 {
 public:
     explicit CorrodeEditor (CorrodeProcessor&);
+    ~CorrodeEditor() override { setLookAndFeel (nullptr); }
 
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
+    // Declared first so it is destroyed last, after every component that uses it.
+    CorrodeLookAndFeel laf;
+
     XYPad pad;
 
     std::array<juce::TextButton, 3> modeButtons;
